@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lock In Buddy</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <header class="brand"><span class="brand-icon">✳</span> lock in buddy <span class="prototype">PLAYGROUND</span></header>
+    <main class="welcome">
+      <p class="eyebrow">A LITTLE COMPANY. A LITTLE MORE FOCUS.</p>
+      <h1>Big plans.<br />Little buddy.</h1>
+      <p class="intro">Meet your new focus friend. Nudge to get started,<br class="desktop-break" /> stay with it, and chat with buddy.</p>
+      <div class="instructions"><span>↗ Drag your buddy anywhere</span><span>☏ Click to check in</span><span>◷ Make a little focus time</span></div>
+      <p class="hint">Your buddy is hanging out over there</p>
+    </main>
+
+    <section id="buddy-panel" class="buddy-panel" aria-label="Buddy panel" hidden>
+      <header class="panel-header">
+        <div class="mini-buddy" aria-hidden="true">••</div>
+        <div><h2>Your buddy</h2><p><span class="status-dot"></span> Here for you</p></div>
+        <button id="close-panel" class="icon-button" aria-label="Close buddy panel">×</button>
+      </header>
+      <div class="tabs" role="tablist" aria-label="Buddy tools">
+        <button id="chat-tab" class="tab active" role="tab" aria-selected="true" aria-controls="chat-view">Chat</button>
+        <button id="timer-tab" class="tab" role="tab" aria-selected="false" aria-controls="timer-view" tabindex="-1">Focus timer</button>
+      </div>
+      <div id="chat-view" role="tabpanel" aria-labelledby="chat-tab">
+        <div id="messages" class="messages" role="log" aria-live="polite" aria-label="Chat messages">
+          <div class="message buddy-message">Let's lock in today! <br />What do you have to work on?</div>
+          <p class="demo-note">Demo chat · simple automatic replies</p>
+        </div>
+        <form id="chat-form" class="chat-form">
+          <label class="sr-only" for="chat-input">Message your buddy</label>
+          <input id="chat-input" placeholder="Tell buddy what’s on your mind…" maxlength="500" autocomplete="off" required />
+          <button class="send-button" aria-label="Send message" type="submit">↑</button>
+        </form>
+      </div>
+      <div id="timer-view" class="timer-view" role="tabpanel" aria-labelledby="timer-tab" hidden>
+        <p class="timer-label">FOCUS TIME - LET'S LOCK IN</p>
+        <div id="timer-display" class="timer-display" role="timer" aria-label="Time remaining">25:00</div>
+        <p id="timer-status">Ready when you are.</p>
+        <div class="durations" aria-label="Timer duration">
+          <button data-minutes="5" aria-pressed="false">5 min</button>
+          <button data-minutes="10" aria-pressed="false">10 min</button>
+          <button data-minutes="25" class="selected" aria-pressed="true">25 min</button>
+        </div>
+        <button id="start-timer" class="primary-button">Start focusing</button>
+        <button id="reset-timer" class="reset-button">Reset timer</button>
+        <p id="timer-announcement" class="sr-only" aria-live="polite"></p>
+      </div>
+      <div class="panel-footer">Small steps count, too.</div>
+    </section>
+    <button id="buddy" class="buddy" aria-label="Open buddy chat. Drag to move." aria-expanded="false" aria-controls="buddy-panel">
+      <span class="buddy-face" aria-hidden="true"><span class="eyes"><i></i><i></i></span><span class="smile"></span></span>
+    </button>
+  </body>
+</html>
