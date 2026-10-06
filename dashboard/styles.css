@@ -1,0 +1,18 @@
+/* Dashboard page layout and typography. Buddy styles live in ../styleBuddy.css. */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root { font-family: 'DM Sans', sans-serif; color: #263a32; background: #f6f7f0; --green: #365b44; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100dvh; background: radial-gradient(ellipse at 78% 70%, #e7eddc 0, transparent 45%); }
+.brand { display: flex; align-items: center; gap: 10px; padding: 36px 6%; font-weight: 700; font-size: 19px; letter-spacing: -.6px; }
+.brand-icon { font-size: 32px; color: var(--green); }
+.prototype { margin-left: 13px; border: 1px solid #d6dccd; padding: 5px 9px; border-radius: 5px; color: #7c8777; font-size: 9px; letter-spacing: 1.5px; }
+.welcome { padding: 9vh 9% 80px; }
+.eyebrow { font-size: 10px; letter-spacing: 2.2px; font-weight: 700; color: #7d8b70; }
+h1 { font-family: Manrope, sans-serif; font-size: clamp(60px, 7.5vw, 100px); line-height: 1.08; font-weight: 500; letter-spacing: -6px; margin: 24px 0; }
+.intro { color: #7a8375; line-height: 1.8; font-size: 16px; }
+.instructions { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 34px; color: #5f6e58; font-size: 11px; }
+.hint { margin-top: 65px; color: #8b957f; font-size: 12px; }
+.hint span { font-size: 25px; margin-left: 10px; }
+body > footer { position: fixed; bottom: 28px; left: 6%; color: #9ba48f; font-size: 9px; letter-spacing: 2px; }
+@media (max-width: 600px) { .brand { padding: 24px; } .welcome { padding: 8vh 24px 80px; } h1 { letter-spacing: -4px; } .intro { font-size: 14px; } .instructions { flex-direction: column; gap: 12px; } .hint { margin-top: 35px; } .desktop-break { display: none; } body > footer { left: 24px; font-size: 8px; } }
