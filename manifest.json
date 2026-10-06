@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Lock In Buddy",
+  "version": "0.1.0",
+  "description": "A study buddy with demo chat and a focus timer on YouTube and Google Search.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://www.google.com/*"
+      ],
+      "js": ["appear.js", "buddy.js"],
+      "css": ["styleBuddy.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
