@@ -1,0 +1,76 @@
+/* Only style our own container and its descendants, never the rest of the website. */
+/* The data attribute marks the container created by appear.js. */
+#lock-in-buddy-root[data-lock-in-buddy-root] {
+  all: initial;
+  --buddy-green: #365b44;
+  --buddy-lime: #d5e9a0;
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  isolation: isolate;
+  pointer-events: none; /* The transparent container lets clicks reach the website. */
+  font-family: 'DM Sans', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #263a32;
+  direction: ltr;
+  box-sizing: border-box;
+}
+
+/* Reset general website styles inside buddy, then apply our own styles below. */
+#lock-in-buddy-root[data-lock-in-buddy-root] * {
+  all: revert;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+}
+
+/* Only the visible button and panel receive pointer clicks. */
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy,
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy-panel { pointer-events: auto; }
+
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-button,
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-panel button { cursor: pointer; }
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-button:focus-visible,
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-panel button:focus-visible,
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-panel input:focus-visible { outline: 3px solid #91ac61; outline-offset: 4px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-panel[hidden],
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-panel [hidden] { display: none !important; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy { position: fixed; left: max(0px, calc(100vw - 146px)); top: max(0px, calc(100dvh - 146px)); width: 86px; height: 86px; border: 5px solid #f6f7f0; border-radius: 50%; background: var(--buddy-lime); box-shadow: 0 8px 28px #365b4426; touch-action: none; user-select: none; z-index: 20; display: grid; place-items: center; transition: box-shadow .2s; padding: 0; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy:hover { box-shadow: 0 8px 32px #365b4440; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy.dragging { cursor: grabbing; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy-face { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .eyes { display: flex; gap: 17px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .eyes i { width: 5px; height: 8px; background: #36533b; border-radius: 50%; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .smile { width: 14px; height: 7px; border: 2px solid #36533b; border-top: 0; border-radius: 0 0 14px 14px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy-panel { position: fixed; width: 350px; max-width: calc(100vw - 24px); border: 1px solid #e0e5d8; background: #fffef9; border-radius: 22px; box-shadow: 0 18px 65px #344d3420; overflow: hidden; z-index: 10; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .panel-header { padding: 20px; display: flex; align-items: center; gap: 11px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .mini-buddy { width: 38px; height: 38px; background: var(--buddy-lime); border-radius: 50%; display: grid; place-items: center; letter-spacing: 5px; padding-left: 5px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .panel-header h2 { margin: 0; font-size: 15px; font-weight: 700; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .panel-header p { margin: 5px 0 0; font-size: 10px; color: #8a9581; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .status-dot { display: inline-block; width: 5px; height: 5px; background: #91b873; border-radius: 50%; margin-right: 3px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .icon-button { margin-left: auto; background: transparent; border: 0; font-size: 23px; color: #8b9582; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .tabs { display: flex; padding: 4px; margin: 0 20px; background: #f0f2e9; border-radius: 9px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .tab { flex: 1; padding: 9px; border: 0; border-radius: 7px; color: #89927e; background: transparent; font-size: 12px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .tab.active { background: #fffef9; color: var(--buddy-green); box-shadow: 0 2px 4px #00000008; font-weight: 700; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .messages { height: 235px; overflow-y: auto; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .message { padding: 12px 14px; border-radius: 13px; font-size: 12px; line-height: 1.7; max-width: 90%; overflow-wrap: anywhere; flex-shrink: 0; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .buddy-message { background: #eff3e6; align-self: flex-start; border-bottom-left-radius: 3px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .user-message { background: var(--buddy-green); color: white; align-self: flex-end; border-bottom-right-radius: 3px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .demo-note { font-size: 9px; color: #9aa38e; margin: 0; text-align: center; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .chat-form { margin: 0 16px 16px; display: flex; gap: 8px; padding: 7px; border: 1px solid #e3e7da; border-radius: 12px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .chat-form input { min-width: 0; flex: 1; border: 0; background: transparent; padding-left: 5px; font-size: 11px; color: #36533b; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .chat-form input::placeholder { color: #9ca391; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .send-button { border: 0; border-radius: 8px; background: var(--buddy-green); color: white; width: 32px; height: 32px; font-size: 20px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .panel-footer { border-top: 1px solid #edf0e5; padding: 12px; text-align: center; color: #a1aa95; font-size: 9px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .timer-view { padding: 26px 24px 15px; text-align: center; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .timer-label { font-size: 8px; letter-spacing: 1.5px; color: #8b957f; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .timer-display { font-family: Manrope, sans-serif; font-size: 58px; letter-spacing: -3px; font-variant-numeric: tabular-nums; margin-top: 12px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] #lock-in-buddy-timer-status { font-size: 11px; color: #8b957f; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .durations { display: flex; justify-content: center; gap: 8px; margin: 20px 0; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .durations button { border: 1px solid #e2e6d9; background: transparent; color: #78866c; border-radius: 8px; padding: 8px 14px; font-size: 11px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .durations .selected { background: #edf3dd; border-color: #cbdba8; color: var(--buddy-green); }
+#lock-in-buddy-root[data-lock-in-buddy-root] .primary-button { background: var(--buddy-green); border: 0; color: white; border-radius: 10px; padding: 12px; width: 100%; font-size: 12px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .reset-button { background: none; border: 0; padding: 12px; color: #8b957f; font-size: 10px; }
+#lock-in-buddy-root[data-lock-in-buddy-root] .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
