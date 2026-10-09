@@ -21,21 +21,38 @@
         <button id="lock-in-buddy-close-panel" class="icon-button" aria-label="Close buddy panel" type="button">×</button>
       </header>
 
+      <div class="focus-plan">
+        <p class="plan-label">YOUR FOCUS</p>
+        <p id="lock-in-buddy-current-task" class="current-task">Set a task to begin.</p>
+        <p id="lock-in-buddy-current-step" class="current-step" hidden></p>
+        <details id="lock-in-buddy-task-editor" open>
+          <summary>Set or edit your task</summary>
+          <form id="lock-in-buddy-task-form" class="task-form">
+            <label for="lock-in-buddy-task-input">What are you working on?</label>
+            <input id="lock-in-buddy-task-input" placeholder="e.g. Study biology" maxlength="500" autocomplete="off" required />
+            <label for="lock-in-buddy-step-input">First small step (optional)</label>
+            <input id="lock-in-buddy-step-input" placeholder="e.g. Review five flashcards" maxlength="500" autocomplete="off" />
+            <button id="lock-in-buddy-save-task" class="primary-button" type="submit">Save task</button>
+            <p class="task-help">Saving a changed task resets the shared timer.</p>
+          </form>
+        </details>
+      </div>
+      <p id="lock-in-buddy-save-status" class="save-status" role="status">Loading your session…</p>
+
       <div class="tabs" role="tablist" aria-label="Buddy tools">
         <button id="lock-in-buddy-chat-tab" class="tab active" role="tab" aria-selected="true" aria-controls="lock-in-buddy-chat-view" type="button">Chat</button>
         <button id="lock-in-buddy-timer-tab" class="tab" role="tab" aria-selected="false" aria-controls="lock-in-buddy-timer-view" tabindex="-1" type="button">Focus timer</button>
       </div>
 
       <div id="lock-in-buddy-chat-view" role="tabpanel" aria-labelledby="lock-in-buddy-chat-tab">
-        <div id="lock-in-buddy-messages" class="messages" role="log" aria-live="polite" aria-label="Chat messages">
-          <div class="message buddy-message">Let's lock in today! <br />What do you have to work on?</div>
-          <p class="demo-note">Demo chat · simple automatic replies</p>
-        </div>
+        <div id="lock-in-buddy-messages" class="messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
+        <p class="demo-note">Demo chat · try “done”, “more time”, or “break”</p>
         <form id="lock-in-buddy-chat-form" class="chat-form">
           <label class="sr-only" for="lock-in-buddy-chat-input">Message your buddy</label>
           <input id="lock-in-buddy-chat-input" placeholder="Tell buddy what’s on your mind…" maxlength="500" autocomplete="off" required />
           <button class="send-button" aria-label="Send message" type="submit">↑</button>
         </form>
+        <button id="lock-in-buddy-chat-focus" class="primary-button chat-focus" type="button">Start 25 min focus</button>
       </div>
 
       <div id="lock-in-buddy-timer-view" class="timer-view" role="tabpanel" aria-labelledby="lock-in-buddy-timer-tab" hidden>
@@ -49,10 +66,11 @@
         </div>
         <button id="lock-in-buddy-start-timer" class="primary-button" type="button">Start focusing</button>
         <button id="lock-in-buddy-reset-timer" class="reset-button" type="button">Reset timer</button>
+        <button id="lock-in-buddy-check-in" class="reset-button" type="button" hidden>Check in with Buddy</button>
         <p id="lock-in-buddy-timer-announcement" class="sr-only" aria-live="polite"></p>
       </div>
 
-      <div class="panel-footer">Small steps count, too.</div>
+      <div id="lock-in-buddy-session-note" class="panel-footer">Small steps count, too.</div>
     </section>
 
     <button id="lock-in-buddy-button" class="buddy" aria-label="Open buddy chat. Drag to move." aria-expanded="false" aria-controls="lock-in-buddy-panel" type="button">

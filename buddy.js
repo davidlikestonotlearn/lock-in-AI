@@ -12,6 +12,35 @@
   const panel = root.querySelector('#lock-in-buddy-panel');
   const chatTab = root.querySelector('#lock-in-buddy-chat-tab');
   const timerTab = root.querySelector('#lock-in-buddy-timer-tab');
+  const Session = globalThis.LockInBuddySession;
+  const store = globalThis.LockInBuddyStore.createClient();
+  const saveStatus = root.querySelector('#lock-in-buddy-save-status');
+  let state = null;
+  let ready = false;
+  let busy = false;
+
+  function showError(error) {
+    saveStatus.textContent = error.message || 'Buddy could not save your changes. Please try again.';
+    saveStatus.classList.add('save-error');
+    saveStatus.hidden = false;
+  }
+
+  function saveUI(patch) {
+    if (ready) store.saveUI(patch).catch(showError);
+  }
+
+  // UI choices are separate from the shared task/timer, so dragging never
+  // overwrites a newer session. Save only when a drag or other UI action finishes.
+  function savePosition() {
+    const rect = buddy.getBoundingClientRect();
+    saveUI({ position: { left: rect.left, top: rect.top } });
+  }
+
+  function placeBuddy(position) {
+    buddy.style.left = `${Math.max(0, Math.min(position.left, window.innerWidth - buddy.offsetWidth))}px`;
+    buddy.style.top = `${Math.max(0, Math.min(position.top, window.innerHeight - buddy.offsetHeight))}px`;
+    positionPanel();
+  }
 
   // Keep clicks and typing inside buddy from triggering the website's shortcuts.
   root.addEventListener('click', (event) => event.stopPropagation());
@@ -27,11 +56,23 @@
     panel.style.maxHeight = `${window.innerHeight - 24}px`; // Limits the panels height
     panel.style.overflowY = 'auto'; // Allows overflow, scrolling if necessary
 
-    const left = rect.right - panel.offsetWidth; // Calculate the panel's left position so its right edge aligns with buddy's.
-    const above = rect.top - panel.offsetHeight - 12; // Calculate where the panel's top would be if placed above buddy with a 12px gap.
+    let left = rect.right - panel.offsetWidth;
+    const aboveSpace = rect.top - 24;
+    const belowSpace = window.innerHeight - rect.bottom - 24;
+    let top;
 
-    // condition ? valueIfTrue : valueIfFalse chooses above or below buddy.
-    const top = above >= 12 ? above : rect.bottom + 12;
+    if (panel.offsetHeight <= aboveSpace) top = rect.top - panel.offsetHeight - 12;
+    else if (panel.offsetHeight <= belowSpace) top = rect.bottom + 12;
+    else if (rect.right + panel.offsetWidth + 24 <= window.innerWidth || rect.left - panel.offsetWidth >= 24) {
+      // A tall panel can sit beside Buddy instead of covering the chat controls.
+      left = rect.right + panel.offsetWidth + 24 <= window.innerWidth
+        ? rect.right + 12 : rect.left - panel.offsetWidth - 12;
+      top = rect.top + (rect.height - panel.offsetHeight) / 2;
+    } else {
+      // On narrow screens, scroll the panel in the larger space above or below.
+      panel.style.maxHeight = `${Math.min(window.innerHeight - 24, Math.max(120, aboveSpace, belowSpace))}px`;
+      top = aboveSpace >= belowSpace ? rect.top - panel.offsetHeight - 12 : rect.bottom + 12;
+    }
     // Math.min sets the upper limit; Math.max sets the lower limit (a 12px margin).
     panel.style.left = `${Math.max(12, Math.min(left, window.innerWidth - panel.offsetWidth - 12))}px`;
     panel.style.top = `${Math.max(12, Math.min(top, window.innerHeight - panel.offsetHeight - 12))}px`;
@@ -39,17 +80,26 @@
 
   // Show the panel when open is true; hide it when false.
   // It also moves keyboard focus and tells screen readers whether the panel is open.
-  function setPanelOpen(open) {
+  function setPanelOpen(open, moveFocus = true) {
     // ! reverses a boolean, if open/true, hidden is false. vice versa
     panel.hidden = !open;
 
     buddy.setAttribute('aria-expanded', String(open));
+    if (open && chatTab.classList.contains('active')) scrollChatToLatest();
     positionPanel(); // Runs panel positioning
 
     // When opening, put keyboard focus on the selected tab button.
     // Focus moves the keyboard to that tab
-    if (open) (chatTab.classList.contains('active') ? chatTab : timerTab).focus();
-    else buddy.focus(); // Focus keyboard on buddy if panel isn't open
+    if (moveFocus) {
+      if (open) (chatTab.classList.contains('active') ? chatTab : timerTab).focus();
+      else buddy.focus();
+    }
+    saveUI({ panelOpen: open });
+  }
+
+  function scrollChatToLatest() {
+    const log = root.querySelector('#lock-in-buddy-messages');
+    log.scrollTop = log.scrollHeight;
   }
 
   // Dragging state: null means no drag is happening; otherwise drag stores its details.
@@ -99,6 +149,7 @@
   function finishDrag() {
     if (!drag) return;
     suppressClick = drag.moved;
+    if (drag.moved) savePosition();
     drag = null;
     buddy.classList.remove('dragging');
   }
@@ -128,13 +179,9 @@
     }
   });
 
-  // When the window changes size, keep buddy and its panel inside the new boundaries.
-  window.addEventListener('resize', () => {
-    const rect = buddy.getBoundingClientRect();
-    buddy.style.left = `${Math.max(0, Math.min(rect.left, window.innerWidth - buddy.offsetWidth))}px`;
-    buddy.style.top = `${Math.max(0, Math.min(rect.top, window.innerHeight - buddy.offsetHeight))}px`;
-    positionPanel();
-  });
+  // Clamp to the new viewport, but keep the saved preference so a temporarily
+  // small window does not permanently move Buddy on the next full-sized reload.
+  window.addEventListener('resize', () => placeBuddy(buddy.getBoundingClientRect()));
 
   // Show the view belonging to the supplied chat or timer button.
   function switchTab(tab) {
@@ -149,7 +196,9 @@
       // aria-controls contains the ID of the view this button belongs to.
       root.querySelector(`#${button.getAttribute('aria-controls')}`).hidden = !selected;
     });
+    if (tab === chatTab) scrollChatToLatest();
     positionPanel(); // Fix the position since chat and timer have different heights
+    saveUI({ tab: tab === timerTab ? 'timer' : 'chat' });
   }
 
   // Set up the same click and keyboard behavior for each tab button.
@@ -167,144 +216,228 @@
   });
 
   const messages = root.querySelector('#lock-in-buddy-messages');
-  // Create a chat bubble and scroll to the latest message.
-  // text is the message content; sender is 'user' or 'buddy' and chooses its CSS style.
-  function addMessage(text, sender) {
-    const message = document.createElement('div');
-    message.className = `message ${sender}-message`;
-
-    // textContent safely displays user input as text.
-    message.textContent = text;
-    messages.append(message);
-    messages.scrollTop = messages.scrollHeight; // Scroll to the bottom so the newest message is visible.
-  }
-
-  // This callback runs when the chat form is submitted (Send button or Enter key).
-  // It displays your message, clears the input, and picks a simple demo reply.
-  root.querySelector('#lock-in-buddy-chat-form').addEventListener('submit', (event) => {
-    event.preventDefault(); // Stop the form's default behavior of reloading the page.
-    event.stopPropagation(); // Do not send this form event to the website.
-    const input = root.querySelector('#lock-in-buddy-chat-input');
-    const text = input.value.trim();
-
-    if (!text) return; // If there is no text
-
-    addMessage(text, 'user');
-    input.value = '';
-
-    // BASE REPLY
-    let reply = 'Let’s make it small: pick one step you can finish, then start a focus timer. I’m cheering you on!';
-    // These regular expressions look for whole words: \b = word boundary, | = or,
-    // i = ignore capitalization. test(text) returns true when a word matches.
-    if (/\b(tired|break|rest)\b/i.test(text)) reply = 'A breather can help. Take 5 or 10 minutes, stretch a little, and come back to one small step.';
-    else if (/\b(hello|hi|hey)\b/i.test(text)) reply = 'Hey there! What would you like to make progress on today?';
-    else if (/\b(done|finished)\b/i.test(text)) reply = 'Look at you go! Take a moment to enjoy that progress. What’s next: a break or another small step?';
-    addMessage(reply, 'buddy');
-  });
-
-  // TIMER 
-
-  // Timer state: duration and remaining are in seconds; endTime is in milliseconds.
-  // interval stores the ID returned by setInterval; null means the timer is stopped.
-  // Use an end time so elapsed time is counted even if the browser delays an interval.
-  let duration = 25 * 60;
-  let remaining = duration;
-  let endTime = null;
-  let interval = null;
+  const taskInput = root.querySelector('#lock-in-buddy-task-input');
+  const stepInput = root.querySelector('#lock-in-buddy-step-input');
+  const taskEditor = root.querySelector('#lock-in-buddy-task-editor');
+  const taskForm = root.querySelector('#lock-in-buddy-task-form');
+  const currentTask = root.querySelector('#lock-in-buddy-current-task');
+  const currentStep = root.querySelector('#lock-in-buddy-current-step');
+  const chatInput = root.querySelector('#lock-in-buddy-chat-input');
+  const chatFocus = root.querySelector('#lock-in-buddy-chat-focus');
   const display = root.querySelector('#lock-in-buddy-timer-display');
   const timerStatus = root.querySelector('#lock-in-buddy-timer-status');
   const startButton = root.querySelector('#lock-in-buddy-start-timer');
+  const checkIn = root.querySelector('#lock-in-buddy-check-in');
   const announcement = root.querySelector('#lock-in-buddy-timer-announcement');
+  const durationButtons = [...root.querySelectorAll('[data-minutes]')];
+  const actionControls = [
+    ...taskForm.querySelectorAll('input, button'), chatInput,
+    root.querySelector('.send-button'), chatFocus, startButton,
+    root.querySelector('#lock-in-buddy-reset-timer'), ...durationButtons,
+  ];
+  let taskDraftDirty = false;
+  let messagesSignature = '';
+  let completionPending = false;
+  let nextCompletionAttempt = 0;
 
-  // Convert remaining seconds into a display like "04:09".
-  // This only updates the display; it does not start or stop the timer.
+  function renderControls() {
+    actionControls.forEach((control) => { control.disabled = !ready || busy; });
+    durationButtons.forEach((button) => {
+      button.disabled = !ready || busy || state?.status === 'running';
+    });
+  }
+
   function renderTimer() {
-    // floor() gives whole minutes; % gives leftover seconds; padStart adds a leading 0.
-    const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
-    const seconds = String(remaining % 60).padStart(2, '0');
-    display.textContent = `${minutes}:${seconds}`;
+    if (!state) return;
+    const remaining = Session.secondsLeft(state);
+    display.textContent = `${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
   }
 
-  // Stop repeated ticks and clear the timer's running state.
-  // remaining is kept so the timer can resume from the same number of seconds.
-  function stopInterval() {
-    clearInterval(interval);
-    interval = null;
-    endTime = null;
-  }
+  function renderSession(next) {
+    const previous = state;
+    state = next;
+    currentTask.textContent = next.task ? `${next.taskDone ? '✓ ' : ''}${next.task}` : 'Set a task to begin.';
+    currentStep.textContent = next.step ? `First step: ${next.step}` : '';
+    currentStep.hidden = !next.step;
+    // A sync from another tab must not erase an unfinished form edit.
+    if (!taskDraftDirty) {
+      taskInput.value = next.task;
+      stepInput.value = next.step;
+    }
 
-  // Calculate how much time is left, update the display, and handle completion.
-  // Called repeatedly while running, and once just before pausing.
-  function tick() {
-    // Date.now() gives milliseconds. Divide by 1000 for seconds, round up,
-    // and use Math.max to prevent a negative countdown.
-    remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+    // Only touch the chat log when its contents change; timer ticks never rebuild
+    // it or make screen readers announce the same conversation again.
+    const signature = JSON.stringify(next.messages);
+    if (signature !== messagesSignature) {
+      const existingIds = [...messages.children].map((node) => node.dataset.messageId);
+      const nextIds = new Set(next.messages.map((message) => message.id));
+      [...messages.children].forEach((node) => {
+        if (!nextIds.has(node.dataset.messageId)) node.remove();
+      });
+      next.messages.forEach((saved) => {
+        if (existingIds.includes(saved.id)) return;
+        const message = document.createElement('div');
+        message.dataset.messageId = saved.id;
+        message.className = `message ${saved.sender}-message`;
+        message.textContent = saved.text; // User text is displayed, never evaluated as HTML.
+        messages.append(message);
+      });
+      messages.scrollTop = messages.scrollHeight;
+      messagesSignature = signature;
+    }
+
+    const labels = {
+      idle: ['Ready when you are.', 'Start focusing'],
+      running: ['One thing at a time. You’ve got this.', 'Pause timer'],
+      paused: ['Paused. Resume when you’re ready.', 'Resume focusing'],
+      completed: [next.taskDone ? 'Task complete. Nice work!' : 'Time is up! Check in with Buddy.', 'Start again'],
+    };
+    [timerStatus.textContent, startButton.textContent] = labels[next.status];
+    chatFocus.textContent = next.status === 'running' ? 'View focus timer'
+      : next.status === 'paused' ? 'Resume focus time' : `Start ${next.duration / 60} min focus`;
+    checkIn.hidden = next.status !== 'completed';
+    durationButtons.forEach((button) => {
+      const selected = Number(button.dataset.minutes) * 60 === next.duration;
+      button.classList.toggle('selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+    if (next.status === 'completed' && previous?.status !== 'completed') {
+      announcement.textContent = next.taskDone ? 'Task complete. Nice work!' : 'Timer complete. Check in with Buddy.';
+    } else if (next.status !== 'completed') announcement.textContent = '';
     renderTimer();
+    renderControls();
+    positionPanel();
+  }
 
-    if (remaining === 0) {
-      stopInterval();
-      timerStatus.textContent = 'Nice work! Time for a breather.';
-      startButton.textContent = 'Start again';
-      announcement.textContent = 'Timer complete. Nice work! Time for a breather.';
-      addMessage('Your timer is done! Take a breath and celebrate showing up.', 'buddy');
+  // Wait for the save before treating an action as successful. This also prevents
+  // rapid repeated clicks in this tab; the worker handles overlapping other tabs.
+  async function act(action) {
+    if (!ready || busy) return false;
+    busy = true;
+    saveStatus.hidden = true;
+    saveStatus.classList.remove('save-error');
+    renderControls();
+    try {
+      await store.dispatch(action);
+      return true;
+    } catch (error) {
+      showError(error);
+      return false;
+    } finally {
+      busy = false;
+      renderControls();
     }
   }
 
-  // Clicking the main timer button pauses a running timer or starts/resumes a stopped one.
-  startButton.addEventListener('click', () => {
-    if (interval !== null) { // Timer is running - pause it
-      tick();
-
-      // tick() may have just finished the timer; don't replace its completion message.
-      if (interval === null) return;
-
-      stopInterval();
-      timerStatus.textContent = 'Paused. Take your time.';
-      startButton.textContent = 'Resume focusing';
-
-    } else { // Timer is stopped - start or resume 
-      if (remaining === 0) remaining = duration; // If the timer finished, restore duration
-
-      // Set a new finish time using the current time plus the remaining seconds.
-      endTime = Date.now() + remaining * 1000;
-
-      // Pass the function itself: setInterval calls tick every 250 milliseconds.
-      interval = setInterval(tick, 250);
-
-      timerStatus.textContent = 'One thing at a time. You’ve got this.';
-      startButton.textContent = 'Pause timer';
-      announcement.textContent = '';
-      renderTimer();
+  taskForm.addEventListener('input', () => { taskDraftDirty = true; });
+  taskEditor.addEventListener('toggle', positionPanel);
+  taskForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const task = taskInput.value.trim();
+    const step = stepInput.value.trim();
+    if (!task) {
+      showError(new Error('Give your task a name first.'));
+      taskInput.focus();
+      return;
+    }
+    if (await act({ type: 'setTask', task, step })) {
+      taskDraftDirty = false;
+      // Use the latest synced state if another tab changed the task while saving.
+      taskInput.value = state.task;
+      stepInput.value = state.step;
+      taskEditor.open = false;
+      switchTab(chatTab);
+      chatInput.focus();
     }
   });
 
-  // Stop the countdown, restore the selected duration, and reset the labels.
-  function resetTimer() {
-    stopInterval();
-    remaining = duration;
-    renderTimer();
-    timerStatus.textContent = 'Ready when you are.';
-    startButton.textContent = 'Start focusing';
-    announcement.textContent = '';
+  root.querySelector('#lock-in-buddy-chat-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const text = chatInput.value.trim();
+    if (!text) return;
+    if (await act({ type: 'chat', text })) {
+      chatInput.value = '';
+      if (state.task && !taskDraftDirty) taskEditor.open = false;
+      chatInput.focus();
+    }
+  });
+
+  function needsTask() {
+    if (state?.task) return false;
+    taskEditor.open = true;
+    showError(new Error('Set a task above, or tell Buddy what you’re working on in chat.'));
+    taskInput.focus();
+    positionPanel();
+    return true;
   }
 
-  // Give the reset button the function to run when clicked.
-  root.querySelector('#lock-in-buddy-reset-timer').addEventListener('click', resetTimer);
+  chatFocus.addEventListener('click', async () => {
+    if (needsTask()) return;
+    if (state.status === 'running' || await act({ type: 'start' })) {
+      switchTab(timerTab);
+      timerTab.focus();
+    }
+  });
+  startButton.addEventListener('click', () => {
+    if (needsTask()) return;
+    act({ type: state.status === 'running' ? 'pause' : 'start' });
+  });
+  root.querySelector('#lock-in-buddy-reset-timer').addEventListener('click', () => act({ type: 'reset' }));
+  durationButtons.forEach((button) => button.addEventListener('click', () => {
+    act({ type: 'setDuration', duration: Number(button.dataset.minutes) * 60 });
+  }));
+  checkIn.addEventListener('click', () => {
+    switchTab(chatTab);
+    chatInput.focus();
+  });
 
-  // Find all duration buttons and attach a click callback to each one.
-  root.querySelectorAll('[data-minutes]').forEach((button) => {
+  // The interval only paints the display. Persisting every tick would create
+  // unnecessary writes; one saved endTime is enough to recover the countdown.
+  async function refreshTimer() {
+    renderTimer();
+    if (!ready || completionPending || Date.now() < nextCompletionAttempt
+      || state?.status !== 'running' || Session.secondsLeft(state) > 0) return;
+    completionPending = true;
+    try { await store.dispatch({ type: 'reconcile' }); }
+    catch (error) {
+      nextCompletionAttempt = Date.now() + 5000;
+      showError(error);
+    }
+    finally { completionPending = false; }
+  }
 
-    // Selecting a duration starts over with that many seconds (it does not start counting).
-    button.addEventListener('click', () => {
-      duration = Number(button.dataset.minutes) * 60; // Switches the duration * 60 to get the amount of seconds
+  renderControls();
+  store.subscribe(renderSession);
+  let renderInterval = null;
+  store.load().then(({ ui }) => {
+    if (ui.position) placeBuddy(ui.position);
+    switchTab(ui.tab === 'timer' ? timerTab : chatTab);
+    setPanelOpen(ui.panelOpen, false); // Restore without stealing the website's focus.
+    taskEditor.open = !state.task;
+    ready = true;
+    saveStatus.hidden = true;
+    root.querySelector('#lock-in-buddy-session-note').textContent = store.isExtension
+      ? 'One focus session across your extension tabs.' : 'Saved in this browser · demo chat.';
+    renderControls();
+    positionPanel();
+    renderInterval = setInterval(refreshTimer, 250);
+  }).catch(showError);
 
-      // Update each button so only the clicked one looks selected and is announced as pressed.
-      root.querySelectorAll('[data-minutes]').forEach((choice) => {
-        choice.classList.toggle('selected', choice === button);
-        choice.setAttribute('aria-pressed', String(choice === button));
-      });
-
-      resetTimer();
-    });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && ready) {
+      // Refresh after a suspended tab becomes visible, even if its events were delayed.
+      store.dispatch({ type: 'reconcile' }).catch(showError);
+      refreshTimer();
+    }
+  });
+  // pagehide also happens when a page enters the back/forward cache, so only
+  // discard the connection when the page is really leaving.
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) {
+      clearInterval(renderInterval);
+      store.destroy();
+    }
   });
 })();
