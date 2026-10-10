@@ -1,0 +1,13 @@
+{
+  "name": "lock-in-buddy",
+  "version": "0.3.0",
+  "private": true,
+  "description": "A vanilla JavaScript Chrome extension for local focus sessions and study history.",
+  "scripts": {
+    "test": "node tests/session.test.cjs",
+    "test:browser": "node tests/browser-smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2"
+  }
+}
