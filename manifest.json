@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Lock In Buddy",
-  "version": "0.2.0",
-  "description": "A study buddy with saved tasks, demo chat, and one shared focus timer on YouTube and Google Search.",
+  "version": "0.3.0",
+  "description": "A local study buddy with a shared focus timer, study history, and dashboard on YouTube and Google Search.",
   "permissions": ["storage", "alarms"],
+  "action": { "default_title": "Open Lock-In Buddy dashboard" },
   "background": {
     "service_worker": "background.js"
   },

@@ -38,6 +38,7 @@
         </details>
       </div>
       <p id="lock-in-buddy-save-status" class="save-status" role="status">Loading your session…</p>
+      <button id="lock-in-buddy-retry-load" class="reset-button" type="button" hidden>Retry loading session</button>
 
       <div class="tabs" role="tablist" aria-label="Buddy tools">
         <button id="lock-in-buddy-chat-tab" class="tab active" role="tab" aria-selected="true" aria-controls="lock-in-buddy-chat-view" type="button">Chat</button>

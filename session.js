@@ -1,4 +1,4 @@
-// The session rules are shared by the extension worker and the standalone dashboard.
+// The session rules are shared by the extension worker, Buddy, and dashboard.
 // This file changes plain data; it never touches HTML or writes to storage.
 (() => {
   if (globalThis.LockInBuddySession) return;
@@ -8,6 +8,49 @@
   const DURATIONS = [5 * 60, 10 * 60, 25 * 60];
   const MAX_MESSAGES = 100;
   const cleanText = (value) => typeof value === 'string' ? value.trim().slice(0, 500) : '';
+  const makeId = (now) => globalThis.crypto?.randomUUID?.() || `${now}-${Math.random().toString(36).slice(2)}`;
+
+  // Intervals let today's total exclude pauses and split time across midnight.
+  function normalizeSegments(saved, limit) {
+    if (!Array.isArray(saved)) return [];
+    let left = limit;
+    let lastEnd = 0;
+    const segments = [];
+    for (const segment of saved) {
+      if (!Number.isFinite(segment?.start) || !Number.isFinite(segment?.end)) continue;
+      const start = Math.max(0, lastEnd, segment.start);
+      const end = Math.min(segment.end, start + left);
+      if (end <= start) continue;
+      segments.push({ start, end });
+      left -= end - start;
+      lastEnd = end;
+    }
+    return segments;
+  }
+
+  const elapsed = (segments) => segments.reduce((total, segment) => total + segment.end - segment.start, 0);
+
+  function normalizeHistory(saved) {
+    if (!Array.isArray(saved)) return [];
+    const ids = new Set();
+    return saved.flatMap((record) => {
+      if (!record || typeof record.id !== 'string' || !record.id || ids.has(record.id)
+        || !cleanText(record.task) || !DURATIONS.includes(record.plannedDuration)
+        || !Number.isFinite(record.startedAt) || record.startedAt < 0
+        || !Number.isFinite(record.endedAt) || record.endedAt < record.startedAt
+        || !['completed', 'reset'].includes(record.outcome)) return [];
+      const segments = normalizeSegments(record.segments, record.plannedDuration * 1000)
+        .map(({ start, end }) => ({ start: Math.max(start, record.startedAt), end: Math.min(end, record.endedAt) }))
+        .filter(({ start, end }) => end > start);
+      if (!segments.length) return [];
+      ids.add(record.id);
+      return [{ id: record.id, task: cleanText(record.task), startedAt: record.startedAt,
+        endedAt: record.endedAt, plannedDuration: record.plannedDuration,
+        focusedMs: elapsed(segments), outcome: record.outcome,
+        reason: ['timer', 'done', 'reset', 'taskChanged', 'durationChanged'].includes(record.reason) ? record.reason : record.outcome,
+        segments }];
+    });
+  }
 
   function create() {
     return {
@@ -20,12 +63,14 @@
       remaining: 25 * 60,
       status: 'idle',
       endTime: null,
+      active: null,
+      history: [],
       messages: [{ id: 'welcome', sender: 'buddy', text: 'Let’s lock in! Tell me what you’re working on, or set your task above.' }],
     };
   }
 
   // Saved data can be missing or from an older version. Restore only known fields.
-  function normalize(saved) {
+  function normalize(saved, now = Date.now()) {
     const state = create();
     if (!saved || saved.version !== 1) return state;
     state.revision = Number.isSafeInteger(saved.revision) && saved.revision >= 0 ? saved.revision : 0;
@@ -34,7 +79,7 @@
     state.taskDone = saved.taskDone === true;
     if (DURATIONS.includes(saved.duration)) state.duration = saved.duration;
     state.remaining = Number.isFinite(saved.remaining)
-      ? Math.max(0, Math.min(state.duration, Math.ceil(saved.remaining))) : state.duration;
+      ? Math.max(0, Math.min(state.duration, saved.remaining)) : state.duration;
     if (['idle', 'running', 'paused', 'completed'].includes(saved.status)) state.status = saved.status;
     if (state.status === 'running') {
       if (Number.isFinite(saved.endTime) && saved.endTime > 0 && state.task) state.endTime = saved.endTime;
@@ -47,28 +92,69 @@
         .map((message) => ({ id: message.id, sender: message.sender, text: message.text.slice(0, 1500) }));
       if (messages.length) state.messages = messages;
     }
+    state.history = normalizeHistory(saved.history);
+    if (['running', 'paused'].includes(state.status)) {
+      const active = saved.active;
+      if (active && typeof active.id === 'string' && active.id
+        && Number.isFinite(active.startedAt) && active.startedAt >= 0
+        && (state.status !== 'running' || (Number.isFinite(active.runStartedAt)
+          && active.runStartedAt >= active.startedAt && active.runStartedAt <= state.endTime))) {
+        const segments = normalizeSegments(active.segments, state.duration * 1000);
+        state.active = { id: active.id, startedAt: active.startedAt, segments,
+          runStartedAt: state.status === 'running' ? active.runStartedAt : null };
+      } else {
+        // Pre-history timers have no reliable pause timeline. Preserve their
+        // remaining countdown, but only record time measured after this upgrade.
+        const startedAt = state.status === 'running' ? Math.max(0, Math.min(now, state.endTime)) : now;
+        state.active = { id: `legacy-${state.revision}-${startedAt}`, startedAt,
+          segments: [], runStartedAt: state.status === 'running' ? startedAt : null };
+      }
+    }
     return state;
   }
 
   function secondsLeft(state, now = Date.now()) {
     return state.status === 'running'
-      ? Math.max(0, Math.ceil((state.endTime - now) / 1000)) : state.remaining;
+      ? Math.max(0, Math.ceil((state.endTime - now) / 1000)) : Math.ceil(state.remaining);
   }
 
   // A command describes an intention ("pause"), rather than replacing an entire
   // state snapshot. That keeps an old tab from overwriting a newer tab's changes.
   function reduce(saved, action, now = Date.now()) {
-    const state = normalize(saved);
+    const state = normalize(saved, now);
     let changed = false;
 
     function message(text, sender = 'buddy') {
-      const id = globalThis.crypto?.randomUUID?.() || `${now}-${Math.random().toString(36).slice(2)}`;
+      const id = makeId(now);
       state.messages.push({ id, sender, text });
       state.messages = state.messages.slice(-MAX_MESSAGES);
       changed = true;
     }
 
-    function reset() {
+    function accrue(at) {
+      if (!state.active || state.status !== 'running') return;
+      const start = state.active.runStartedAt;
+      const end = Math.min(at, state.endTime, start + state.duration * 1000 - elapsed(state.active.segments));
+      if (end > start) state.active.segments.push({ start, end });
+      state.active.runStartedAt = null;
+    }
+
+    function finish(outcome, reason, at = now) {
+      if (!state.active) return;
+      accrue(at);
+      const active = state.active;
+      const focusedMs = elapsed(active.segments);
+      if (focusedMs > 0 && !state.history.some((record) => record.id === active.id)) {
+        state.history.push({ id: active.id, task: state.task, startedAt: active.startedAt,
+          endedAt: Math.max(active.startedAt, at), plannedDuration: state.duration,
+          focusedMs, outcome, reason, segments: active.segments });
+      }
+      state.active = null;
+      changed = true;
+    }
+
+    function reset(reason = 'reset') {
+      finish('reset', reason);
       state.status = 'idle';
       state.endTime = null;
       state.remaining = state.duration;
@@ -78,7 +164,8 @@
 
     function pause() {
       if (state.status !== 'running') return;
-      state.remaining = secondsLeft(state, now);
+      accrue(now);
+      state.remaining = Math.max(0, Math.min(state.duration, (state.endTime - now) / 1000));
       state.endTime = null;
       state.status = 'paused';
       changed = true;
@@ -88,7 +175,10 @@
       if (!state.task) throw new Error('Set a task first, so Buddy knows what you’re focusing on.');
       if (state.status === 'running') return;
       const resuming = state.status === 'paused' && state.remaining > 0;
-      if (!resuming) state.remaining = state.duration;
+      if (!resuming) {
+        state.remaining = state.duration;
+        state.active = { id: makeId(now), startedAt: now, segments: [], runStartedAt: now };
+      } else state.active.runStartedAt = now;
       state.status = 'running';
       state.taskDone = false;
       state.endTime = now + state.remaining * 1000;
@@ -99,6 +189,7 @@
     // Only a running timer can complete. Every tab may request this check, but
     // after the first completion the saved status prevents duplicate check-ins.
     if (state.status === 'running' && secondsLeft(state, now) === 0) {
+      finish('completed', 'timer', state.endTime);
       state.status = 'completed';
       state.endTime = null;
       state.remaining = 0;
@@ -113,9 +204,9 @@
         const step = cleanText(action.step);
         if (!task) throw new Error('Give your task a name first.');
         if (task !== state.task || step !== state.step || state.taskDone) {
+          reset('taskChanged');
           state.task = task;
           state.step = step;
-          reset();
           message(`Your task is “${task}”. ${step ? `First small step: “${step}”.` : 'You can add a small first step above.'} Choose a focus time, then start when you’re ready.`);
         }
         break;
@@ -123,8 +214,9 @@
       case 'setDuration':
         if (!DURATIONS.includes(action.duration)) throw new Error('Choose 5, 10, or 25 minutes.');
         if (state.status === 'running') throw new Error('Pause the timer before changing its duration.');
+        reset('durationChanged');
         state.duration = action.duration;
-        reset();
+        state.remaining = state.duration;
         break;
       case 'start':
         start();
@@ -146,6 +238,7 @@
         } else if (/^(done|finished|i’m done|i'm done|i am done)$/.test(command)) {
           if (!state.task) message('Set a task first, then we can celebrate finishing it.');
           else {
+            finish('completed', 'done');
             state.taskDone = true;
             state.status = 'completed';
             state.endTime = null;
@@ -189,5 +282,29 @@
     return ui;
   }
 
-  globalThis.LockInBuddySession = { STORAGE_KEY, UI_PREFIX, create, normalize, normalizeUI, reduce, secondsLeft };
+  function statistics(saved, now = Date.now()) {
+    const state = normalize(saved, now);
+    const midnight = new Date(now);
+    midnight.setHours(0, 0, 0, 0);
+    let todayMs = 0;
+    let totalMs = 0;
+    const segments = state.history.flatMap((record) => record.segments);
+    if (state.active) {
+      segments.push(...state.active.segments);
+      if (state.status === 'running') {
+        const start = state.active.runStartedAt;
+        const end = Math.min(now, state.endTime, start + state.duration * 1000 - elapsed(state.active.segments));
+        if (end > start) segments.push({ start, end });
+      }
+    }
+    for (const { start, end } of segments) {
+      totalMs += end - start;
+      todayMs += Math.max(0, Math.min(end, now) - Math.max(start, midnight.getTime()));
+    }
+    const completed = state.history.filter((record) => record.outcome === 'completed');
+    return { todayMs, totalMs, completedSessions: completed.length,
+      averageMs: completed.length ? completed.reduce((sum, record) => sum + record.focusedMs, 0) / completed.length : 0 };
+  }
+
+  globalThis.LockInBuddySession = { STORAGE_KEY, UI_PREFIX, create, normalize, normalizeUI, reduce, secondsLeft, statistics };
 })();

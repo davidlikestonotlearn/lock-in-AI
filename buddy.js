@@ -15,6 +15,7 @@
   const Session = globalThis.LockInBuddySession;
   const store = globalThis.LockInBuddyStore.createClient();
   const saveStatus = root.querySelector('#lock-in-buddy-save-status');
+  const retryLoad = root.querySelector('#lock-in-buddy-retry-load');
   let state = null;
   let ready = false;
   let busy = false;
@@ -411,19 +412,30 @@
   renderControls();
   store.subscribe(renderSession);
   let renderInterval = null;
-  store.load().then(({ ui }) => {
-    if (ui.position) placeBuddy(ui.position);
-    switchTab(ui.tab === 'timer' ? timerTab : chatTab);
-    setPanelOpen(ui.panelOpen, false); // Restore without stealing the website's focus.
-    taskEditor.open = !state.task;
-    ready = true;
-    saveStatus.hidden = true;
-    root.querySelector('#lock-in-buddy-session-note').textContent = store.isExtension
-      ? 'One focus session across your extension tabs.' : 'Saved in this browser · demo chat.';
-    renderControls();
-    positionPanel();
-    renderInterval = setInterval(refreshTimer, 250);
-  }).catch(showError);
+  async function loadSession() {
+    retryLoad.disabled = true;
+    try {
+      const { ui } = await store.load();
+      if (ui.position) placeBuddy(ui.position);
+      switchTab(ui.tab === 'timer' ? timerTab : chatTab);
+      setPanelOpen(ui.panelOpen, false); // Restore without stealing the website's focus.
+      taskEditor.open = !state.task;
+      ready = true;
+      saveStatus.hidden = true;
+      root.querySelector('#lock-in-buddy-session-note').textContent = store.isExtension
+        ? 'One focus session across your extension tabs.' : 'Saved in this browser · demo chat.';
+      renderControls();
+      positionPanel();
+      saveStatus.classList.remove('save-error');
+      retryLoad.hidden = true;
+      if (!renderInterval) renderInterval = setInterval(refreshTimer, 250);
+    } catch (error) {
+      showError(error);
+      retryLoad.hidden = false;
+    } finally { retryLoad.disabled = false; }
+  }
+  retryLoad.addEventListener('click', loadSession);
+  loadSession();
 
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && ready) {

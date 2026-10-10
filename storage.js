@@ -1,5 +1,5 @@
 // The UI uses this small adapter instead of knowing where its data is stored.
-// Extension: commands go to one worker. Dashboard: localStorage + a browser lock.
+// Extension pages and websites: one worker. Standalone preview: localStorage + a browser lock.
 (() => {
   if (globalThis.LockInBuddyStore) return;
   const Session = globalThis.LockInBuddySession;
@@ -51,10 +51,14 @@
         const stored = readLocal(Session.STORAGE_KEY);
         const previous = Session.normalize(stored);
         const state = Session.reduce(previous, action);
-        if (!stored || state.revision !== previous.revision) {
+        if (!stored || !Array.isArray(stored.history) || (!stored.active && previous.active)
+          || state.revision !== previous.revision) {
           localStorage.setItem(Session.STORAGE_KEY, JSON.stringify(state));
         }
-        return publish(state);
+        // Native storage events reach other tabs, but not other clients in this
+        // document (Buddy and the preview dashboard each have their own client).
+        window.dispatchEvent(new CustomEvent('lock-in-buddy-session-change', { detail: state }));
+        return current;
       });
     }
 
@@ -64,8 +68,12 @@
     const localListener = (event) => {
       if (event.key === Session.STORAGE_KEY || event.key === null) publish(readLocal(Session.STORAGE_KEY));
     };
+    const samePageListener = (event) => publish(event.detail);
     if (isExtension) chrome.storage.onChanged.addListener(storageListener);
-    else window.addEventListener('storage', localListener);
+    else {
+      window.addEventListener('storage', localListener);
+      window.addEventListener('lock-in-buddy-session-change', samePageListener);
+    }
 
     return {
       isExtension,
@@ -92,7 +100,10 @@
       destroy() {
         listeners.clear();
         if (isExtension) chrome.storage.onChanged.removeListener(storageListener);
-        else window.removeEventListener('storage', localListener);
+        else {
+          window.removeEventListener('storage', localListener);
+          window.removeEventListener('lock-in-buddy-session-change', samePageListener);
+        }
       },
     };
   }

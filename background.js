@@ -6,6 +6,10 @@ const Session = globalThis.LockInBuddySession;
 const ALARM_NAME = 'lock-in-buddy-focus-complete';
 let queue = Promise.resolve();
 
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/index.html') }).catch(console.error);
+});
+
 function enqueue(work) {
   const result = queue.then(work);
   queue = result.catch(() => {}); // A failed command must not block later commands.
@@ -27,7 +31,9 @@ async function updateSession(action) {
   const stored = await chrome.storage.local.get(Session.STORAGE_KEY);
   const previous = Session.normalize(stored[Session.STORAGE_KEY]);
   const state = Session.reduce(previous, action);
-  if (!stored[Session.STORAGE_KEY] || state.revision !== previous.revision) {
+  if (!stored[Session.STORAGE_KEY] || !Array.isArray(stored[Session.STORAGE_KEY].history)
+    || (!stored[Session.STORAGE_KEY].active && previous.active)
+    || state.revision !== previous.revision) {
     await chrome.storage.local.set({ [Session.STORAGE_KEY]: state });
   }
   await schedule(state);
