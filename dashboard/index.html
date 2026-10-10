@@ -3,26 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lock In Buddy</title>
+    <meta name="color-scheme" content="light" />
+    <title>Study dashboard · Lock-In Buddy</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="../styleBuddy.css" />
-    <!-- Shared state helpers load before the widget is created and connected. -->
     <script src="../session.js" defer></script>
     <script src="../storage.js" defer></script>
     <script src="../appear.js" defer></script>
     <script src="../buddy.js" defer></script>
+    <script src="script.js" defer></script>
   </head>
   <body>
-
-    <header class="brand"><span class="brand-icon">✳</span> lock in buddy <span class="prototype">PLAYGROUND</span></header>
+    <header class="brand"><span class="brand-icon" aria-hidden="true">✳</span> lock in buddy <span class="prototype">DASHBOARD</span></header>
     <main class="welcome">
       <p class="eyebrow">A LITTLE COMPANY. A LITTLE MORE FOCUS.</p>
-      <h1>Big plans.<br />Little buddy.</h1>
-      <p class="intro">Meet your new focus friend. Nudge to get started,<br class="desktop-break" /> stay with it, and chat with buddy.</p>
-      <div class="instructions"><span>↗ Drag your buddy anywhere</span><span>☏ Click to check in</span><span>◷ Make a little focus time</span></div>
-      <p class="hint">Your buddy is out there floating</p>
-    </main>
+      <h1>Small steps.<br />Real progress.</h1>
+      <p class="intro">Your focus time, all in one place. Keep going at your own pace.</p>
+      <p id="data-source" class="privacy-note">Your study data stays in this browser.</p>
+      <div id="dashboard-status" class="dashboard-status" role="status">Loading your study history…</div>
+      <button id="retry-load" class="dashboard-button" type="button" hidden>Retry loading</button>
 
-    <!-- Buddy's button and panel are created by appear.js. -->
+      <section aria-labelledby="stats-heading">
+        <h2 id="stats-heading">Your statistics</h2>
+        <div class="stats-grid">
+          <article class="stat-card"><h3>Study time today</h3><p id="today-time">—</p><span>Includes your current session</span></article>
+          <article class="stat-card"><h3>Completed sessions</h3><p id="completed-count">—</p><span>Across your saved history</span></article>
+          <article class="stat-card"><h3>Total study time</h3><p id="total-time">—</p><span>Includes partial sessions</span></article>
+          <article class="stat-card"><h3>Average session</h3><p id="average-time">—</p><span>Completed sessions only</span></article>
+        </div>
+      </section>
+
+      <section class="current-focus" aria-labelledby="focus-heading">
+        <div><p class="eyebrow">YOUR CURRENT FOCUS</p><h2 id="focus-heading">Set a task to begin.</h2><p id="focus-detail">Open Buddy to set your task and timer.</p></div>
+        <button id="open-buddy" class="dashboard-button" type="button" disabled>Open Buddy</button>
+      </section>
+
+      <section class="history-section" aria-labelledby="history-heading">
+        <div class="section-heading"><h2 id="history-heading">Study history</h2><span id="history-count"></span></div>
+        <p class="section-note">Pauses don’t count. Reset sessions keep the time you put in. “Done” completes a session early.</p>
+        <p id="history-empty" class="empty-state" hidden>Your first small step starts here. Finish or reset a focus session to see it in your history.</p>
+        <div id="history-table-container" class="table-scroll" tabindex="0" role="region" aria-label="Study history table" hidden>
+          <table>
+            <caption class="sr-only">Saved focus sessions, newest first. Dates use your local timezone.</caption>
+            <thead><tr><th scope="col">Task</th><th scope="col">Finished</th><th scope="col">Planned</th><th scope="col">Focused</th><th scope="col">Result</th></tr></thead>
+            <tbody id="history-rows"></tbody>
+          </table>
+        </div>
+        <button id="load-more" class="dashboard-button secondary" type="button" hidden>Show more sessions</button>
+      </section>
+      <footer class="page-footer">Saved locally · Dates use your local timezone · No account needed</footer>
+    </main>
   </body>
 </html>
