@@ -1,120 +1,147 @@
-# Lock In Buddy
+# Lock-In Buddy
 
-A draggable study buddy with saved tasks, demo chat, and a shared focus timer. It runs on `https://www.youtube.com/*` and `https://www.google.com/*`, with a standalone dashboard for development. Chat uses preset replies; no AI service or API key is involved.
+A local-first Chrome extension MVP built with vanilla JavaScript, HTML, and CSS. A draggable Buddy on YouTube and Google helps you set a task, run a shared focus timer, and check in through preset chat replies. The extension dashboard turns saved study sessions into useful statistics.
 
-## Try the extension
+No build step, account, AI service, API key, or backend is required. Playwright is a development-only dependency for browser tests.
 
-1. Open `chrome://extensions` and turn on **Developer mode**.
-2. Click **Load unpacked** and select this project's root folder, `lock-in-buddy` (the folder containing `manifest.json`).
-3. If already installed, click **Reload** on the extension's card. This version adds the `storage` and `alarms` permissions.
-4. Refresh your YouTube and Google tabs so they run the updated scripts.
-5. Click Buddy, save a task and an optional first small step, then click **Start 25 min focus**. You can choose 5, 10, or 25 minutes in the timer tab before starting.
+## Features
 
-You can also tell Buddy your task in chat when no task is set. For example, send “Study biology,” then add “Review five flashcards” as your small step in the task editor.
+- Task and optional first small step, with a 5-, 10-, or 25-minute focus timer.
+- Start, pause, resume, reset, and early completion through `done` in chat.
+- One shared session and conversation across YouTube, Google, and the extension dashboard.
+- Persistent task, chat (latest 100 messages), timer, and website-specific Buddy position, panel state, and selected tab.
+- Study history: task, start/end dates, planned duration, actual timer-running time, and completed/reset result.
+- Dashboard: today's study time, total completed sessions, all-time study time, average completed-session duration, current focus, and paginated history.
+- Dashboard access from the extension toolbar icon; Buddy remains available on the dashboard.
+- Keyboard controls, responsive dashboard, safe text rendering, and visible storage errors with loading retries.
 
-## What is saved and shared
+## Install and use
 
-| Data | Behavior |
+1. Download or clone the project.
+2. Open `chrome://extensions` in a current desktop Chrome browser and enable **Developer mode**.
+3. Choose **Load unpacked** and select the project root containing `manifest.json`.
+4. Pin **Lock In Buddy** using Chrome's extensions menu. Click its icon to open the dashboard.
+5. Visit `https://www.youtube.com/` or `https://www.google.com/`, open Buddy, and save a task. Choose a duration in **Focus timer**, then start.
+
+After updating the code, click **Reload** on the extension's card and refresh existing website/dashboard tabs. Existing timers keep their countdown on upgrade; historical focus time from before the history feature was installed cannot be recovered.
+
+## How study time is counted
+
+Study time means **time the focus timer is running**, not a measurement of attention or activity. Switching tabs, closing tabs, restarting the browser, and putting the computer to sleep do not pause a running timer. Pause it explicitly when taking a break. A late completion is dated at the timer's deadline and cannot exceed the planned duration.
+
+| Action | History and statistics |
 | --- | --- |
-| Task, first step, task completion | One shared focus plan across supported extension tabs |
-| Timer duration, status, remaining time / finish timestamp | Start, pause, resume, or reset from any supported tab |
-| Chat | One shared conversation; the latest 100 messages are kept |
-| Buddy position | Saved separately for each website and clamped to fit the current window |
-| Open/closed panel and selected tab | Restored on refresh, separately for each website |
+| Start | Creates a session ID and running interval |
+| Pause | Saves elapsed milliseconds and exact remaining time; no final history row yet |
+| Resume / `more time` while paused | Continues the same session ID; paused time is excluded |
+| Timer expires | Saves one completed record, even if several tabs check at once |
+| `done` while running or paused | Records only elapsed active time as completed early |
+| `done` without an active timer | Marks the task done without inventing a focus session |
+| Reset, change task/first step, or change duration while paused | Saves nonzero partial time as reset; does not increase completed sessions |
+| Start again / `more time` after completion | Creates a new focus session |
 
-The session survives page refreshes, extension reloads, and browser restarts. A running timer uses real elapsed time: closing a tab or sleeping your computer does **not** pause it. If the deadline passes while you're away, Buddy completes the session and shows the check-in when you return. A paused timer keeps its remaining time until you resume.
+A zero-time session does not create a history row. Reset retains the task and chat. Duration changes are disabled while running. Editing a changed task or first step resets the timer and records any partial time against the original task and duration.
 
-Saving a **changed task or first step** resets the timer. Choosing a duration also resets it; duration buttons are disabled while running. Reset keeps the task and conversation. Changes synchronize the shared session, while opening the panel or moving Buddy in one tab does not move or open other already-visible panels. New tabs and refreshed tabs use that website's latest saved panel settings.
+Today's total includes active, paused, completed, and reset study time falling between local midnight and now. Saved running intervals split sessions correctly across midnight. The completed count and average use completed history records, including early completion; reset sessions contribute only to study-time totals. History dates use the viewer's current local timezone. Displayed durations are rounded down to seconds (hours display minutes); stored time uses milliseconds.
 
-Everything is saved locally in your Chrome profile. No page content or chat is sent to a server. Uninstalling the extension removes its extension storage.
+Chat is deliberately simple:
 
-## Chat and timer flow
-
-Set a task → optionally name a small first step → start focusing → check in.
-
-| Chat message | Effect |
+| Message | Effect |
 | --- | --- |
-| A task description, when no task is set | Saves that message as the current task |
-| `start` or `resume` | Starts or resumes the current task's timer |
-| `break` (or a message containing `tired`, `break`, or `rest`) | Pauses a running timer and suggests taking a breather |
-| `more time` | Resumes a paused timer, or starts another full focus period after completion |
-| `done` or `finished` | Marks the current task complete and stops its timer |
+| Task description when no task is set | Saves it as the task |
+| `start`, `resume`, or `more time` | Starts/resumes the timer |
+| Message containing `break`, `tired`, or `rest` | Pauses a running timer |
+| `done` or `finished` | Marks the task complete and finishes an active session |
 
-When focus time ends, Buddy posts one shared check-in asking how it went. You can reply in chat or click **Check in with Buddy** from the timer. Commands such as `done` are matched as complete messages, so “not done” does not accidentally finish your task. Use the task editor to begin a different task.
+Completion commands match the entire message, so “not done” does not complete a task.
 
-## Try the dashboard
+## Architecture
 
-Open `dashboard/index.html` for a quick single-page preview. For dependable synchronization between dashboard tabs, serve the project over localhost:
+The original modules remain in place:
+
+| File | Responsibility |
+| --- | --- |
+| `session.js` | Plain-data session rules, validation, interval accounting, history recording, and statistics |
+| `background.js` | Single extension writer; serializes commands, persists state, schedules completion alarms, and opens the dashboard |
+| `storage.js` | UI adapter: `load`, `dispatch`, `subscribe`, and `saveUI`; sends commands to the worker and listens for storage changes |
+| `appear.js` | Creates the floating Buddy's HTML once, using scoped IDs |
+| `buddy.js` | Forms, chat, dragging, keyboard interaction, rendering, and error/loading recovery |
+| `styleBuddy.css` | Widget styling scoped to its root so website controls retain their own styles |
+| `dashboard/index.html`, `script.js`, `styles.css` | Dashboard markup, rendering through the shared storage client, and responsive styling |
+| `manifest.json` | Manifest V3 worker, toolbar action, storage/alarm permissions, and supported content-script URLs |
+
+UI scripts load in order: `session.js` → `storage.js` → `appear.js` → `buddy.js`. The dashboard then loads its renderer. The worker loads `session.js` using `importScripts`.
+
+### Engineering decisions
+
+**Commands instead of whole-state replacements.** Each UI sends an intention such as `{ type: 'pause' }`. The worker reads the latest snapshot before applying it. An old tab cannot overwrite a newer tab's task or history with an outdated copy.
+
+**One writer and one saved snapshot.** The worker's promise queue serializes commands, alarms, and startup reconciliation. The session, active intervals, and history are stored together under `lock-in-buddy-session-v1` in `chrome.storage.local`. Completion and its history entry are saved in the same write. Stable session IDs and completed status make repeated completion checks harmless. A failed write leaves the previously saved running state available for retry; failures do not stop the queue.
+
+**Timestamps instead of ticking storage writes.** A running timer saves `endTime`, then each UI calculates `ceil((endTime - Date.now()) / 1000)` for display. Pausing saves exact remaining time and closes the running interval. Resuming opens another interval. This prevents repeated short pauses from losing time through rounding and lets the timer recover after reload/restart.
+
+**Workers are temporary; storage is durable.** Chrome can stop an idle service worker. Startup, worker wake, alarms, and visible-tab reconciliation reload the saved state and repair missing alarms. Chrome may delay alarms; recording caps focus time at the deadline.
+
+**Shared data, separate UI preferences.** `chrome.storage.onChanged` updates all clients. A revision counter prevents a slow response from repainting older session state. Buddy position/panel/tab preferences have separate keys per website, so a drag cannot overwrite the timer. User text is rendered with `textContent`.
+
+## Privacy
+
+The extension stores its data in `chrome.storage.local` in your Chrome profile. It does not upload data, read page contents, use Chrome sync, or load external fonts. It requests only `storage` and `alarms`; creating the dashboard tab does not require access to your browsing history. Uninstalling the extension removes its extension storage. Local data is not an encrypted backup.
+
+## Tests
+
+Use Node.js 20 or newer. Unit/integration tests use Node's built-in test runner and VM; they require no dependency installation:
+
+```bash
+npm test
+# Or directly:
+node tests/session.test.cjs
+```
+
+The suite exercises real session, worker, and client scripts with fake Chrome APIs: exact pause accounting, early completion, partial resets, midnight boundaries, invalid data/actions, storage-write failure and retry, concurrent tabs/alarms, worker restart, alarm restoration, UI isolation, toolbar action, and shared dashboard history.
+
+For real Chromium extension tests:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:browser
+```
+
+Linux may need Playwright's browser system libraries (`npx playwright install --with-deps chromium`). The browser suite runs headlessly with a temporary Chrome profile and mocked Google/YouTube responses. It checks refresh, drag/keyboard controls, cross-site synchronization, native dashboard statistics/history, early completion/reset, mobile layout, browser restart with the same profile, and standalone preview behavior. It accelerates a saved deadline rather than waiting five minutes. Temporary profiles are removed and screenshots are written under your OS temporary directory. You can set `CHROMIUM_EXECUTABLE_PATH` to use an existing compatible Chromium executable.
+
+The toolbar handler is covered by a worker test; headless Playwright opens its destination URL because it cannot click Chrome's toolbar. Mocked host pages verify extension behavior but do not establish compatibility with every change to the live Google/YouTube websites. Automated browser restarts are graceful close/reopen, not power-loss simulations.
+
+The implementation was verified with **23 passing unit/integration tests** and **9 passing browser workflow groups**, with no uncaught page errors.
+
+### Manual demonstration
+
+1. Start a five-minute task on YouTube and refresh. Check that the task and elapsed countdown survive.
+2. Open Google and the dashboard using the pinned extension icon. Confirm the same task and timer everywhere.
+3. Pause on Google. Wait several seconds; dashboard study time should stop increasing. Resume on YouTube.
+4. Send `done` in Buddy. Confirm one **Completed early** history row with actual time below the planned five minutes.
+5. Start again, wait briefly, and reset. Confirm a **Reset · partial** row and an unchanged completed-session count.
+6. Start again, close/reopen Chrome, and open the dashboard. Confirm history and the running countdown return.
+7. Let a timer expire with multiple tabs open. Confirm one check-in and one completed history record. Expiration with no website tabs open should be handled by the alarm, or reconciled next time Chrome/the dashboard opens.
+8. Drag Buddy, refresh, resize, and navigate between YouTube videos. Verify one widget and reachable controls. Use Tab, arrow keys on Buddy tabs, and Escape to close the panel.
+
+## Standalone development preview
 
 ```bash
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8000/dashboard/` in two tabs. The dashboard uses `localStorage`, storage events, and the browser's Web Locks API to share its own session. Keep both tabs on the same origin: `localhost` and `127.0.0.1` have separate storage.
+Visit `http://127.0.0.1:8000/dashboard/`. The preview labels itself clearly and uses **separate** `localStorage` data. Browser storage events and Web Locks coordinate preview tabs on the same origin; a custom event also updates Buddy and the dashboard within one page. It cannot read installed extension data and has no worker/alarm: expiry is reconciled when a preview tab is open again. For dependable synchronization use localhost rather than `file://`.
 
-The standalone dashboard's data is separate from the installed extension's data. Direct `file://` previews have browser-dependent storage behavior; use localhost for multi-tab testing. The dashboard has no background worker, so with all dashboard tabs closed it records an expired timer's check-in the next time you open it. The extension uses a Chrome alarm to handle completion even with no website tabs open.
+## Known limitations
 
-## How the code works — a learning walkthrough
+- Only `www.youtube.com` and `www.google.com` are supported; regional Google domains, Gmail, and Docs are excluded.
+- Running time includes time while away, asleep, or the browser is closed. It is not proof of focused work. System clock changes can affect timers; timezone changes affect today's grouping.
+- No operating-system notifications, AI, authentication, backend, cloud sync, export, or history-deletion UI.
+- History stays in one Chrome profile. There is no automatic backup or cross-device sharing.
+- History is not silently truncated. Chrome's local-storage quota and increasingly large snapshots may eventually limit long-term use. Save failures appear in the UI; the MVP has no storage-management interface.
+- Existing pre-history timers preserve their countdown but only record time from upgrade onward; previous chat and task data remain. Earlier sessions cannot be reconstructed.
+- Reloading the extension invalidates old content-script connections; refresh those website tabs.
+- A Chrome alarm may fire late. The next wake/load also checks expired timers, records the original deadline, and avoids duplicate history.
 
-1. **`session.js`: the rules.** Defines the saved state and a `reduce(state, action)` function. An action is a small instruction such as `{ type: 'pause' }`. The function calculates the next state without touching the page or saving anything. Both the extension and dashboard use these same rules.
-2. **`background.js`: the extension's coordinator.** Receives commands from all supported tabs, reads the latest saved session, applies an action, and saves the result. A promise queue processes commands one at a time so two tabs cannot accidentally overwrite each other's messages. It schedules a Chrome alarm for the running timer.
-3. **`storage.js`: the connection.** Gives the UI the same `load`, `dispatch`, `subscribe`, and `saveUI` methods in both environments. In the extension it messages the worker and listens to `chrome.storage.onChanged`. On the dashboard it uses local storage and a browser lock to coordinate tabs.
-4. **`appear.js`: the HTML.** Creates the task editor, buddy button, chat, and timer once.
-5. **`buddy.js`: the interaction.** Handles dragging, keyboard controls, forms, and rendering. It sends commands through the storage adapter instead of keeping an independent timer in each tab.
-6. **`styleBuddy.css`: the widget's appearance.** Its selectors are scoped to Buddy's root. `dashboard/styles.css` styles only the playground.
-
-The scripts load in this order: `session.js` → `storage.js` → `appear.js` → `buddy.js`. The worker separately loads `session.js` with `importScripts`.
-
-### Why store a finish timestamp?
-
-If you start a 10-minute timer at 2:00 PM, save a deadline of 2:10 PM. At 2:03 PM, any tab can calculate seven minutes left:
-
-```js
-remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-```
-
-The interval only updates the display. It does not save a new countdown every second. Pausing calculates and saves the remaining seconds, and resuming creates a new deadline from those seconds.
-
-### Why add a background worker?
-
-Two content scripts have separate JavaScript memory. The worker coordinates their commands, and storage keeps the result even if Chrome shuts down the idle worker. Alarms wake it to reconcile completion; startup also restores missing alarms. Completion changes the status from `running` to `completed`, so a second tab checking the same deadline cannot post another completion message.
-
-Session updates carry an increasing `revision`. The client ignores an older response if it has already received a newer state through a storage event. Panel settings use different storage keys, so saving a drag position cannot overwrite the shared timer.
-
-## Verification
-
-Run the dependency-free tests with Node.js:
-
-```bash
-node tests/session.test.cjs
-```
-
-These cover elapsed time after restoration, pause/resume, check-in commands, changing tasks, bounded history, overlapping tab commands, worker restart and alarm restoration, website-specific UI settings, and single completion messages.
-
-`tests/browser-smoke.cjs` adds optional end-to-end checks using Playwright and its Chromium browser. With Playwright available to Node, run `node tests/browser-smoke.cjs`. It loads the actual extension against mocked website responses and checks the standalone dashboard over a temporary localhost server. Screenshots and the temporary browser profile stay outside the project.
-
-Try these browser checks after reloading the extension:
-
-1. On YouTube, save a task, drag Buddy, select five minutes, and start the timer.
-2. Refresh. The task, messages, position, open panel, selected tab, and elapsed countdown should return.
-3. Open Google in another tab. Open Buddy: it should show the same task, messages, and remaining time.
-4. Pause on Google. YouTube should also show a paused timer. Refresh while paused and then resume from either tab.
-5. Send `break`, `more time`, and `done` in chat. Check that the timer changes in both tabs.
-6. Start again, then change the task. Both tabs should show the new task and a reset timer.
-7. Let a five-minute period finish. Each tab should show the same single check-in message.
-8. Navigate between YouTube videos and resize the window. Check for one Buddy and reachable controls.
-9. Try keyboard navigation: Tab reaches controls, arrow keys switch tabs, and Escape closes the panel from inside Buddy.
-
-## Keeping the website separate
-
-- Buddy IDs start with `lock-in-buddy-`, including labels and accessibility references.
-- Element lookups stay inside Buddy's own marked container.
-- Widget CSS resets and styling are scoped to that container.
-- Only Buddy's button and panel receive pointer clicks; the transparent overlay lets other clicks reach the website.
-- Keyboard events and clicks inside Buddy stop bubbling to the website.
-- User text is displayed with `textContent`, not inserted as HTML.
-- Running the creation and behavior scripts again does not duplicate Buddy or its listeners.
-
-Google support currently means `www.google.com`, not Gmail, Docs, or regional domains. This version has no toolbar popup, operating-system notifications, or AI integration. Timer completion appears inside Buddy's panel.
-
-Chrome references: [Storage](https://developer.chrome.com/docs/extensions/reference/api/storage), [Alarms](https://developer.chrome.com/docs/extensions/reference/api/alarms), [Service worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle), [Content scripts](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts).
+API references: [Chrome Storage](https://developer.chrome.com/docs/extensions/reference/api/storage), [Alarms](https://developer.chrome.com/docs/extensions/reference/api/alarms), [Action](https://developer.chrome.com/docs/extensions/reference/api/action), [Extension worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle).
